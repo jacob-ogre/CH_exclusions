@@ -1,0 +1,116 @@
+---
+title: "Critical habitat exclusions under the ESA"
+author: "Center for Conservation Innovation"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    css: custom.css
+    df_print: paged
+    fig_caption: yes
+    fig_width: 7
+    highlight: tango
+    toc: true
+    toc_depth: 3
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r include = FALSE}
+library(htmlTable)
+library(knitr)
+library(rio)
+library(tidyverse)
+
+dat <- readRDS("data/CH_exclusions_data.rds")[1:84,]
+lis <- import("data/listing_data_2019-12-16.csv")
+names(lis) <- c("common_name", "scientific_name", "sp_url", "status", "entity",
+                "esa_listing_date", "reg_desc", "reg_name", "reg_url", "taxon",
+                "ch", "ch_date")
+lis$ch <- if_else(lis$ch == "", "None", lis$ch)
+
+d2 <- left_join(dat, lis, by="scientific_name") %>% 
+  select(-c("common_name.y", "status.y", "esa_listing_date.y"))
+names(d2)[1:5] <- c("common", "scientific", "url", "status", "listing_date")
+d2$listing_date <- as.Date(d2$listing_date, format = "%m-%d-%Y")
+```
+
+## INTRO
+
+Something...something...
+
+----
+
+```{r echo=FALSE}
+d2$proposed_excl <- if_else(
+  d2$proposed_rule_economic_costs == 1 |
+  d2$proposed_rule_national_security == 1 |
+  d2$proposed_rule_other_exclusions == 1,
+  1,
+  0
+)
+
+d2$final_excl <- if_else(
+  d2$final_rule_economic_exclusions == 1 |
+  d2$final_rule_national_security == 1 |
+  d2$final_rule_other_exclusions == 1,
+  1,
+  0
+)
+
+d2$ch_excl_gain <- if_else(d2$final_excl == 1 & d2$proposed_excl == 0, 1, 0)
+d2$ch_excl_loss <- if_else(d2$final_excl == 0 & d2$proposed_excl == 1, 1, 0)
+```
+
+We find `r sum(d2$ch_excl_gain, na.rm = TRUE)` cases in which **CH exclusions were not proposed but then were added in the final rule.**  In contrast, we find `r sum(d2$ch_excl_loss, na.rm = TRUE)` cases in which **CH exclusions were proposed but then dropped in the final rule.**
+
+----
+
+```{r echo=FALSE, warning=FALSE}
+fin_ch <- filter(lis, ch %in% c("Final"))
+w_ch <- table(fin_ch$ch, fin_ch$reg_name)
+w_ch <- table(fin_ch$reg_name)
+all_spp <- table(lis$reg_name)
+ch_rates_reg <- (w_ch / all_spp) %>% round(digits = 3) %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  rename(region = Var1, freq = Freq)
+
+fin_excl <- filter(d2, final_excl == 1)
+fin_excl_tab <- table(fin_excl$reg_name) %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  rename(region = Var1, "Final Excl. Freq." = Freq)
+
+fin_d2_tab <- table(d2$reg_name) %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  rename(region = Var1, "Sample Spp." = Freq)
+
+f2 <- left_join(ch_rates_reg, fin_excl_tab, by = "region") %>%
+  left_join(fin_d2_tab, by = "region")
+f2$`Excl. Rate` <- f2$`Final Excl. Freq.` / f2$`Sample Spp.`
+
+knitr::kable(f2)
+```
+
+```{r echo=FALSE}
+ch_x_region <- table(lis$reg_name, lis$ch) %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  rename(region = Var1, ch_status = Var2, n_spp = Freq)
+
+ch_reg_excl <- left_join(f2, ch_x_region, by = "region")
+kable(ch_reg_excl)
+```
+
+
+```{r echo=FALSE}
+
+# prop_excl <- filter(d2, d2$)
+# 
+# table(d2$reg_name, d2$proposed_rule_economic_costs)
+# table(d2$reg_name, d2$proposed_rule_national_security)
+# table(d2$reg_name, d2$proposed_rule_other_exclusions)
+# 
+# table(d2$reg_name, d2$final_rule_economic_exclusions)
+# table(d2$reg_name, d2$final_rule_national_security)
+# table(d2$reg_name, d2$final_rule_other_exclusions)
+```
